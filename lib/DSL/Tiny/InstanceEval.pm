@@ -52,7 +52,7 @@ particular instance of a class that consumes the role.
 
 use Moo::Role;
 
-use MooX::Types::MooseLike::Base qw(CodeRef Str);
+use Types::Standard qw(CodeRef Str);
 
 =attr _anon_pkg_name
 

@@ -103,12 +103,43 @@ existing high-leverage tools.
 
 use Moo::Role;
 
-use Sub::Exporter -setup => { groups => { install_dsl => \&_dsl_build, } };
-
-use Data::OptList;
-use MooX::Types::MooseLike::Base qw(ArrayRef);
-use Params::Util qw(_ARRAYLIKE);
+use Types::Standard qw(ArrayRef);
+use Types::TypeTiny qw(ArrayLike);
 use Sub::Exporter::Util qw(curry_method);
+use XXX -with => 'Data::Dumper';
+
+use Exporter::Tiny;
+our @ISA = 'Exporter::Tiny';
+
+sub import                      { goto \&Exporter::Tiny::import };
+sub _exporter_fail              { goto \&Exporter::Tiny::_exporter_fail };
+sub _exporter_install_sub       { goto \&Exporter::Tiny::_exporter_install_sub };
+
+sub _exporter_permitted_regexp {
+    qr{.};
+}
+
+sub _exporter_expand_tag {
+    if ($_[1] eq 'install_dsl')
+    {
+        my $class = shift;
+        return @{ Exporter::Tiny::mkopt($class->dsl_keywords) };
+    }
+    goto \&Exporter::Tiny::_exporter_expand_tag;
+}
+
+sub _exporter_validate_opts {
+    my ($class, $opts) = @_;
+    $opts->{dsl} = $class->_dsl_build;
+    1;
+}
+
+sub _exporter_expand_sub {
+    my ($class, $name, $value, $globals, $permitted) = @_;
+    return ($name, $globals->{dsl}{$name}) if exists $globals->{dsl}{$name};
+    $class->SUPER::_exporter_expand_sub($name, $value, $globals, $permitted);
+}
+
 
 =method import
 
@@ -226,8 +257,10 @@ sub _dsl_build {
     my $instance = ref $invocant ? $invocant : $invocant->new();
 
     # fluff up the keyword specification
-    my $keywords = Data::OptList::mkopt_hash( $instance->dsl_keywords,
-        { moniker => 'keyword list' }, ['HASH'], );
+    my $keywords = {
+        map { $_->[0] => $_->[1] }
+        @{ Exporter::Tiny::mkopt( $instance->dsl_keywords ) }
+    };
 
     my %dsl = map { $_ => $instance->_compile_keyword( $_, $keywords->{$_} ) }
         keys $keywords;
@@ -254,12 +287,12 @@ sub _compile_keyword {
     # make sure before is an array ref
     # call each generator (if any), save resulting coderefs
     my $before = $args->{before};
-    $before = [$before] unless _ARRAYLIKE($before);
+    $before = [$before] unless ArrayLike->check($before);
     my @before_code = map { $_->($self) } grep { defined $_ } @{$before};
 
     # generate after code, if any
     my $after = $args->{after};
-    $after = [$after] unless _ARRAYLIKE($after);
+    $after = [$after] unless ArrayLike->check($after);
     my @after_code = map { $_->($self) } grep { defined $_ } @{$after};
 
     if ( @before_code or @after_code ) {
